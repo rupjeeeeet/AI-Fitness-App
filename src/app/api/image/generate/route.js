@@ -13,7 +13,7 @@ export async function POST(req) {
       );
     }
 
-    const url = "https://router.huggingface.co/nebius/v1/images/generations";
+    const url = "https://router.huggingface.co/nscale/v1/images/generations";
 
     const body = {
       model: "stabilityai/stable-diffusion-xl-base-1.0",
