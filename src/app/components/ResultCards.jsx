@@ -43,39 +43,19 @@ export default function ResultCards({ plan }) {
         ? `${defaultPrompt} ${opts.promptSuffix}`
         : defaultPrompt;
 
-      const controller = new AbortController();
-      const timeoutMs = 25000; // 25s
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch("/api/image/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: finalPrompt }),
+      });
 
-      let data = null;
-      try {
-        const res = await fetch("/api/image/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: finalPrompt }),
-          signal: controller.signal,
-        });
-
-        // attempt to parse JSON if possible
-        data = await res.json().catch(() => null);
-
-        if (res.ok && data?.imageUrl) {
-          setImageUrl(data.imageUrl);
-          setImageError(null);
-        } else {
-          setImageUrl(null);
-          setImageError(data?.error || `Image generation failed (${res?.status || "unknown"})`);
-        }
-      } catch (e) {
-        if (e.name === "AbortError") {
-          setImageUrl(null);
-          setImageError("Image generation timed out. Try again or use a smaller prompt.");
-        } else {
-          setImageUrl(null);
-          setImageError(e?.message || "Unknown error");
-        }
-      } finally {
-        clearTimeout(timeoutId);
+      const data = await res.json();
+      if (res.ok && data.imageUrl) {
+        setImageUrl(data.imageUrl);
+        setImageError(null);
+      } else {
+        setImageUrl(null);
+        setImageError(data.error || "Image generation failed");
       }
     } catch (e) {
       setImageUrl(null);
@@ -225,17 +205,24 @@ export default function ResultCards({ plan }) {
         if (Array.isArray(entry)) {
           meals = entry.map(toMeal).filter(Boolean);
         } else if (typeof entry === "object") {
-          meals = Object.keys(entry).map((key) => {
-            // Remove 'Day X - ' from the meal key (e.g., 'Day 1 - Breakfast' -> 'Breakfast')
-            let mealKey = key.replace(/^(Day\s+\d+\s*-\s*)/i, '').trim();
-            // Ensure proper capitalization for display
-            mealKey = mealKey.charAt(0).toUpperCase() + mealKey.slice(1).toLowerCase();
-            
-            return {
-              meal: mealKey,
-              items: toItems(entry[key]),
-            }
-          }).filter(Boolean);
+          // Ignore common metadata keys like 'day' which can appear in some plans
+          const ignoredKeys = new Set(["day", "date", "name", "title", "notes"]);
+
+          meals = Object.keys(entry)
+            .filter((key) => !ignoredKeys.has(key.toLowerCase()))
+            .map((key) => {
+              // Remove 'Day X - ' from the meal key (e.g., 'Day 1 - Breakfast' -> 'Breakfast')
+              let mealKey = key.replace(/^(Day\s+\d+\s*-\s*)/i, "").trim();
+              if (!mealKey) mealKey = key;
+              // Ensure proper capitalization for display
+              mealKey = mealKey.charAt(0).toUpperCase() + mealKey.slice(1).toLowerCase();
+
+              return {
+                meal: mealKey,
+                items: toItems(entry[key]),
+              };
+            })
+            .filter(Boolean);
         }
 
         output.push({ day: d, meals });
@@ -341,24 +328,41 @@ export default function ResultCards({ plan }) {
                   </div>
 
                   {dayObj.meals.length > 0 ? (
-                    dayObj.meals.map((meal, mIndex) => (
-                      <div key={mIndex} className="mt-2">
-                        <div className="font-semibold text-slate-200">
-                          {meal.meal}
+                    dayObj.meals.map((meal, mIndex) => {
+                      // Compute a friendly display label for the meal.
+                      let displayLabel = meal.meal || "Meal";
+                      const lowerLabel = String(displayLabel).toLowerCase();
+
+                      // If the parsed label is a generic 'day' or 'meal', try to infer a real meal type
+                      if (lowerLabel === "day" || lowerLabel === "meal") {
+                        // Try to detect common meal words inside the items text
+                        const joined = (meal.items || []).join(" ").toLowerCase();
+                        const found = joined.match(/\b(breakfast|lunch|dinner|snack|brunch)\b/i);
+                        if (found && found[0]) {
+                          displayLabel = found[0].charAt(0).toUpperCase() + found[0].slice(1).toLowerCase();
+                        } else {
+                          const defaults = ["Breakfast", "Lunch", "Dinner", "Snack"];
+                          displayLabel = defaults[mIndex] || `Meal ${mIndex + 1}`;
+                        }
+                      }
+
+                      return (
+                        <div key={mIndex} className="mt-2">
+                          <div className="font-semibold text-slate-200">{displayLabel}</div>
+                          <ul className="list-disc pl-5 text-sm text-slate-300">
+                            {meal.items.map((item, itemIndex) => (
+                              <li
+                                key={itemIndex}
+                                className="cursor-pointer hover:text-white"
+                                onClick={() => generateImage(item)}
+                              >
+                                {item}
+                              </li>
+                            ))}
+                          </ul>
                         </div>
-                        <ul className="list-disc pl-5 text-sm text-slate-300">
-                          {meal.items.map((item, itemIndex) => (
-                            <li
-                              key={itemIndex}
-                              className="cursor-pointer hover:text-white"
-                              onClick={() => generateImage(item)}
-                            >
-                              {item}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <p className="mt-2 text-sm text-slate-400">
                       No meals listed for {dayObj.day}.
