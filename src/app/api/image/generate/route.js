@@ -1,114 +1,57 @@
 import { NextResponse } from "next/server";
 
-// Simple image generation endpoint.
-// If you provide `REPLICATE_API_TOKEN` in your environment, you can extend this
-// handler to call Replicate (or another image API). Without a token this
-// returns a fallback image from Unsplash using a query search.
-
 export async function POST(req) {
   try {
-    const body = await req.json();
-    const prompt = body?.prompt;
+    const { prompt } = await req.json();
+    if (!prompt) return NextResponse.json({ error: "Missing prompt" }, { status: 400 });
 
-    if (!prompt) {
-      return NextResponse.json({ error: "Missing prompt" }, { status: 400 });
+    const token = process.env.HF_TOKEN;
+    if (!token) {
+      return NextResponse.json(
+        { error: "HF_TOKEN not configured" },
+        { status: 500 }
+      );
     }
 
-    const NANO_URL = process.env.GEMINI_API_KEY;
-    const NANO_KEY = process.env.GEMINI_API_KEY;
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-    const GEMINI_IMAGE_ENDPOINT = GEMINI_API_KEY
-      ? `https://generativelanguage.googleapis.com/v1/images:generate?key=${GEMINI_API_KEY}`
-      : null;
+    const url = "https://router.huggingface.co/nebius/v1/images/generations";
 
-    // 1) If Nano Banana is configured, prefer it for image generation (user requested Nano Banana)
-    if (NANO_URL && NANO_KEY) {
-      try {
-        const res = await fetch(NANO_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${NANO_KEY}`,
-          },
-          body: JSON.stringify({ prompt }),
-        });
+    const body = {
+      model: "black-forest-labs/flux-dev",
+      response_format: "b64_json",
+      prompt: prompt
+    };
 
-        const json = await res.json();
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
 
-        // Expect either { url: "..." } or { image: "data:image/...;base64,..." }
-        if (json.url) {
-          return NextResponse.json({ imageUrl: json.url });
-        }
-
-        if (json.image) {
-          return NextResponse.json({ imageUrl: json.image });
-        }
-
-        // If Nano returns an unexpected shape, continue to try Gemini as fallback
-      } catch (err) {
-        console.error('Nano Banana proxy failed:', err?.message || err);
-        // fallthrough to Gemini/Unsplash
-      }
+    if (!res.ok) {
+      const errText = await res.text().catch(() => null);
+      return NextResponse.json(
+        { error: `Hugging Face Error ${res.status}: ${errText}` },
+        { status: 500 }
+      );
     }
 
-    // 2) Try Gemini image generation if API key is present
-    if (GEMINI_IMAGE_ENDPOINT) {
-      try {
-        const payload = {
-          prompt,
-          imageFormat: "PNG",
-          size: "1024x1024",
-        };
+    const data = await res.json();
+    const b64 = data?.data?.[0]?.b64_json;
 
-        const gRes = await fetch(GEMINI_IMAGE_ENDPOINT, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        const gJson = await gRes.json().catch(() => null);
-
-        if (gRes.ok && gJson) {
-          let found = null;
-
-          if (gJson.artifacts && Array.isArray(gJson.artifacts) && gJson.artifacts[0]) {
-            const a = gJson.artifacts[0];
-            if (a.image) found = a.image;
-            if (a.uri) found = a.uri;
-          }
-
-          if (!found && gJson.candidates && Array.isArray(gJson.candidates) && gJson.candidates[0]) {
-            const c = gJson.candidates[0];
-            if (c.image) found = c.image;
-            if (c.uri) found = c.uri;
-          }
-
-          if (!found && gJson.images && Array.isArray(gJson.images) && gJson.images[0]) {
-            const im = gJson.images[0];
-            if (im.url) found = im.url;
-            if (im.b64_json) found = `data:image/png;base64,${im.b64_json}`;
-            if (im.base64) found = `data:image/png;base64,${im.base64}`;
-          }
-
-          if (!found && gJson.data && gJson.data[0]) {
-            const d = gJson.data[0];
-            if (d.b64_json) found = `data:image/png;base64,${d.b64_json}`;
-            if (d.url) found = d.url;
-          }
-
-          if (found) return NextResponse.json({ imageUrl: found });
-        }
-      } catch (err) {
-        console.error('Gemini image generation failed:', err?.message || err);
-      }
+    if (!b64) {
+      return NextResponse.json(
+        { error: "No image returned" },
+        { status: 500 }
+      );
     }
 
-    // 3) Fallback: use a search image from Unsplash (public, free to use for prototyping)
-    const query = encodeURIComponent(prompt.replace(/\s+/g, "+"));
-    const imageUrl = `https://source.unsplash.com/800x600/?${query}`;
-
-    return NextResponse.json({ imageUrl });
-  } catch (e) {
-    return NextResponse.json({ error: e.message || String(e) }, { status: 500 });
+    return NextResponse.json({
+      imageUrl: `data:image/png;base64,${b64}`,
+    });
+  } catch (err) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

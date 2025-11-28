@@ -72,10 +72,13 @@ bun install
 ```
 
 3. **Set up environment variables**:
-Create a `.env.local` file in the root directory:
+Create a `.env.local` file in the root directory (do NOT commit this file):
 ```env
-NEXT_PUBLIC_REPLICATE_API_KEY=your_replicate_api_key_here
+# Hugging Face server-side API token (keep this secret)
+HF_TOKEN=your_hf_token_here
 ```
+
+Important: If you previously committed a `.env.local` file containing a token, delete it from the repository and rotate the token immediately to avoid compromise.
 
 4. **Run the development server**:
 ```bash

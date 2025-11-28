@@ -43,19 +43,39 @@ export default function ResultCards({ plan }) {
         ? `${defaultPrompt} ${opts.promptSuffix}`
         : defaultPrompt;
 
-      const res = await fetch("/api/image/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: finalPrompt }),
-      });
+      const controller = new AbortController();
+      const timeoutMs = 25000; // 25s
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-      const data = await res.json();
-      if (res.ok && data.imageUrl) {
-        setImageUrl(data.imageUrl);
-        setImageError(null);
-      } else {
-        setImageUrl(null);
-        setImageError(data.error || "Image generation failed");
+      let data = null;
+      try {
+        const res = await fetch("/api/image/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: finalPrompt }),
+          signal: controller.signal,
+        });
+
+        // attempt to parse JSON if possible
+        data = await res.json().catch(() => null);
+
+        if (res.ok && data?.imageUrl) {
+          setImageUrl(data.imageUrl);
+          setImageError(null);
+        } else {
+          setImageUrl(null);
+          setImageError(data?.error || `Image generation failed (${res?.status || "unknown"})`);
+        }
+      } catch (e) {
+        if (e.name === "AbortError") {
+          setImageUrl(null);
+          setImageError("Image generation timed out. Try again or use a smaller prompt.");
+        } else {
+          setImageUrl(null);
+          setImageError(e?.message || "Unknown error");
+        }
+      } finally {
+        clearTimeout(timeoutId);
       }
     } catch (e) {
       setImageUrl(null);
