@@ -16,7 +16,7 @@ export async function POST(req) {
     const url = "https://router.huggingface.co/nebius/v1/images/generations";
 
     const body = {
-      model: "black-forest-labs/flux-dev",
+      model: "stabilityai/stable-diffusion-xl-base-1.0",
       response_format: "b64_json",
       prompt: prompt
     };
