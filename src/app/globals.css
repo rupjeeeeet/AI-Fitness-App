@@ -1,15 +1,21 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Default to dark mode visuals so the app's existing UI remains dark by default */
+  --background: #030417;
+  --foreground: #e6eefc;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Explicit dark class or data-theme attribute */
+.dark, html[data-theme="dark"] {
+  --background: #030417;
+  --foreground: #e6eefc;
+}
+
+/* Light theme override (applied when user toggles) */
+.light, html[data-theme="light"] {
+  --background: #ffffff;
+  --foreground: #171717;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,4 +29,52 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  transition: background 220ms ease, color 220ms ease;
 }
+
+/* Dark-mode overrides for commonly used utility classes in the app so toggling works
+   even when many elements use Tailwind color utilities. These are minimal and target
+   the main backgrounds and text colors used in the components. */
+
+html.dark .bg-white\/5,
+html[data-theme="dark"] .bg-white\/5,
+.dark .bg-white\/5,
+html.dark .bg-white\/10,
+.dark .bg-white\/10 {
+  background-color: rgba(10,12,20,0.5) !important;
+}
+
+html.dark .bg-slate-950\/70,
+.dark .bg-slate-950\/70,
+html.dark .bg-slate-950\/60,
+.dark .bg-slate-950\/60,
+html.dark .bg-slate-900\/40,
+.dark .bg-slate-900\/40 {
+  background-color: rgba(8,10,20,0.6) !important;
+}
+
+html.dark .text-slate-100,
+.dark .text-slate-100,
+html.dark .text-white,
+.dark .text-white {
+  color: var(--foreground) !important;
+}
+
+html.dark .border-white\/10,
+.dark .border-white\/10 {
+  border-color: rgba(255,255,255,0.06) !important;
+}
+
+html.dark .bg-indigo-500\/10,
+.dark .bg-indigo-500\/10,
+html.dark .bg-cyan-500\/5,
+.dark .bg-cyan-500\/5 {
+  background-color: rgba(15,10,40,0.35) !important;
+}
+
+/* Modal background override */
+html.dark .bg-slate-900\/90,
+.dark .bg-slate-900\/90 {
+  background-color: rgba(2,6,23,0.9) !important;
+}
+
